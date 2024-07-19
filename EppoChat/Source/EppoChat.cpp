@@ -5,10 +5,10 @@
 
 using namespace Eppo;
 
-class EppoApp : public Application
+class EppoChat : public Application
 {
 public:
-	EppoApp(const ApplicationSpecification& specification)
+	EppoChat(const ApplicationSpecification& specification)
 		: Application(specification)
 	{
 		std::shared_ptr<AppLayer> layer = std::make_shared<AppLayer>();
@@ -16,13 +16,13 @@ public:
 		PushLayer(layer);
 	}
 
-	~EppoApp() = default;
+	~EppoChat() = default;
 };
 
 Application* Eppo::CreateApplication()
 {
 	ApplicationSpecification spec;
-	spec.Title = "EppoApp";
+	spec.Title = "EppoChat";
 
-	return new EppoApp(spec);
+	return new EppoChat(spec);
 }
