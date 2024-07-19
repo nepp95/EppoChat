@@ -1,0 +1,3 @@
+[submodule "EppoCore"]
+	path = EppoCore
+	url = https://github.com/nepp95/EppoCore
