@@ -1,14 +1,15 @@
 #pragma once
 
 #include <EppoCore.h>
+#include "Network.h"
 
 using namespace Eppo;
 
-class AppLayer : public Layer
+class ClientAppLayer : public Layer
 {
 public:
-	AppLayer() = default;
-	~AppLayer() override = default;
+	ClientAppLayer() = default;
+	~ClientAppLayer() override = default;
 
 	void OnAttach() override;
 	void OnDetach() override;
@@ -16,4 +17,7 @@ public:
 	void OnEvent(Event& e) override;
 	void OnUpdate(float timestep) override;
 	void OnUIRender() override;
+
+private:
+	std::shared_ptr<Network> m_Network;
 };

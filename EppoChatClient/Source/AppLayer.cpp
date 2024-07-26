@@ -2,27 +2,33 @@
 
 #include <imgui/imgui.h>
 
-void AppLayer::OnAttach()
+void ClientAppLayer::OnAttach()
+{
+	const ApplicationSpecification& spec = Application::Get().GetSpecification();
+	NetworkSpecification specification;
+	specification.Type = NetworkType::Client;
+	specification.IP = spec.CommandLineArgs[1];
+	specification.Port = atoi(spec.CommandLineArgs[2]);
+
+	m_Network = std::make_shared<Network>(specification);
+}
+
+void ClientAppLayer::OnDetach()
 {
 
 }
 
-void AppLayer::OnDetach()
+void ClientAppLayer::OnEvent(Event& e)
 {
 
 }
 
-void AppLayer::OnEvent(Event& e)
-{
-
-}
-
-void AppLayer::OnUpdate(float timestep)
+void ClientAppLayer::OnUpdate(float timestep)
 {
 	
 }
 
-void AppLayer::OnUIRender()
+void ClientAppLayer::OnUIRender()
 {
 	// From ImGui example
 	static bool dockspaceOpen = true;
@@ -94,6 +100,9 @@ void AppLayer::OnUIRender()
 	ImGui::End(); // Chatbox
 
 	ImGui::Begin("Users");
+	ImGui::Text("User 1");
+	ImGui::Text("User 2");
+	ImGui::Text("User 3");
 	ImGui::End(); // Users
 
 	ImGui::End(); // Dockspace
