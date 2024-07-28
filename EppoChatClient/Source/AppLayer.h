@@ -1,14 +1,15 @@
 #pragma once
 
 #include <EppoCore.h>
-#include "Network.h"
+#include <steam/isteamnetworkingutils.h>
+#include <steam/steamnetworkingsockets.h>
 
 using namespace Eppo;
 
 class ClientAppLayer : public Layer
 {
 public:
-	ClientAppLayer() = default;
+	ClientAppLayer();
 	~ClientAppLayer() override = default;
 
 	void OnAttach() override;
@@ -18,6 +19,14 @@ public:
 	void OnUpdate(float timestep) override;
 	void OnUIRender() override;
 
+	void OnConnectionStatusChanged(SteamNetConnectionStatusChangedCallback_t* info);
+
+	static ClientAppLayer* Get() { return s_Instance; }
+
 private:
-	std::shared_ptr<Network> m_Network;
+	ISteamNetworkingSockets* m_Socket;
+	
+	HSteamNetConnection* m_Connection;
+
+	static ClientAppLayer* s_Instance;
 };

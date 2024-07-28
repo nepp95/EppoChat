@@ -20,9 +20,9 @@ set(INCLUDE_DIRS
 add_executable(EppoChatServer ${SOURCES})
 
 if (CMAKE_HOST_LINUX)
-    target_compile_definitions(EppoChatCommon PUBLIC EPPO_LINUX)
+    target_compile_definitions(EppoChatServer PUBLIC EPPO_LINUX)
 elseif (CMAKE_HOST_WIN32)
-    target_compile_definitions(EppoChatCommon PUBLIC EPPO_WINDOWS)
+    target_compile_definitions(EppoChatServer PUBLIC EPPO_WINDOWS)
 endif()
 
 target_include_directories(EppoChatServer PRIVATE ${INCLUDE_DIRS})

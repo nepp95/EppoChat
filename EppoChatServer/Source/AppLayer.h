@@ -9,7 +9,7 @@ using namespace Eppo;
 class ServerAppLayer : public Layer
 {
 public:
-	ServerAppLayer() = default;
+	ServerAppLayer();
 	~ServerAppLayer() override = default;
 
 	void OnAttach() override;

@@ -10,6 +10,12 @@ static void SteamOnConnectionStatusChanged(SteamNetConnectionStatusChangedCallba
     ServerAppLayer::Get()->OnConnectionStatusChanged(info);
 }
 
+ServerAppLayer::ServerAppLayer()
+{
+    EPPO_ASSERT(!s_Instance);
+    s_Instance = this;
+}
+
 void ServerAppLayer::OnAttach()
 {
 	SteamDatagramErrMsg errMsg;
@@ -70,5 +76,5 @@ void ServerAppLayer::OnUpdate(float timestep)
 
 void ServerAppLayer::OnConnectionStatusChanged(SteamNetConnectionStatusChangedCallback_t *info)
 {
-	
+	EPPO_INFO("ServerAppLayer::OnConnectionStatusChanged");
 }

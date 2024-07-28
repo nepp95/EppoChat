@@ -1,16 +1,32 @@
 #include "AppLayer.h"
 
+#include <EppoCore.h>
 #include <imgui/imgui.h>
+
+ClientAppLayer* ClientAppLayer::s_Instance = nullptr;
+
+ClientAppLayer::ClientAppLayer()
+{
+	EPPO_ASSERT(!s_Instance);
+    s_Instance = this;
+}
 
 void ClientAppLayer::OnAttach()
 {
-	const ApplicationSpecification& spec = Application::Get().GetSpecification();
-	NetworkSpecification specification;
-	specification.Type = NetworkType::Client;
-	specification.IP = spec.CommandLineArgs[1];
-	specification.Port = atoi(spec.CommandLineArgs[2]);
+	SteamDatagramErrMsg errMsg;
+    if (!GameNetworkingSockets_Init(nullptr, errMsg))
+    {
+        EPPO_ERROR("Failed to initialize GameNetworkingSockets: {}", errMsg);
+    }
 
-	m_Network = std::make_shared<Network>(specification);
+	m_Socket = SteamNetworkingSockets();
+
+	const ApplicationSpecification& spec = Application::Get().GetSpecification();
+
+	SteamNetworkingIPAddr ipAddr;
+    ipAddr.Clear();
+	ipAddr.m_ipv4 = spec.CommandLineArgs[1];
+	
 }
 
 void ClientAppLayer::OnDetach()
@@ -106,4 +122,8 @@ void ClientAppLayer::OnUIRender()
 	ImGui::End(); // Users
 
 	ImGui::End(); // Dockspace
+}
+
+void ClientAppLayer::OnConnectionStatusChanged(SteamNetConnectionStatusChangedCallback_t *info)
+{
 }
