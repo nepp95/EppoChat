@@ -1,6 +1,6 @@
 [submodule "Vendor/GameNetworkingSockets"]
 	path = Vendor/GameNetworkingSockets
-	url = git@github.com:nepp95/GameNetworkingSockets.git
+	url = https://github.com/nepp95/GameNetworkingSockets.git
 [submodule "Vendor/EppoCore"]
 	path = Vendor/EppoCore
-	url = git@github.com:nepp95/EppoCore.git
+	url = https://github.com/nepp95/EppoCore.git

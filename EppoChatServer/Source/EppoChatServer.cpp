@@ -22,7 +22,7 @@ public:
 Application* Eppo::CreateApplication(ApplicationCommandLineArgs args)
 {
     ApplicationSpecification spec;
-	spec.CommandLineArgs = args;
+	spec.CommandLineArgs = std::move(args);
 	spec.Title = "EppoChatServer";
 
     return new EppoChatServer(spec);
