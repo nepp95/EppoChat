@@ -30,7 +30,7 @@ void ServerAppLayer::OnAttach()
 
 	SteamNetworkingIPAddr ipAddr;
     ipAddr.Clear();
-    ipAddr.m_port = atoi(spec.CommandLineArgs[1]);
+    ipAddr.m_port = 8192;
 
 	SteamNetworkingConfigValue_t options;
     options.SetPtr(k_ESteamNetworkingConfig_Callback_ConnectionStatusChanged, (void*)SteamOnConnectionStatusChanged);

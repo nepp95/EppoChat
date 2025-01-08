@@ -1,20 +1,21 @@
 #include "AppLayer.h"
 
 #include <EppoCore.h>
+
 #include <imgui/imgui.h>
 
 ClientAppLayer* ClientAppLayer::s_Instance = nullptr;
+static Buffer s_IPInputBuffer(64);
 
 ClientAppLayer::ClientAppLayer()
 {
-	EPPO_ASSERT(!s_Instance);
-    s_Instance = this;
+	EPPO_ASSERT(!s_Instance)
+	s_Instance = this;
 }
 
 void ClientAppLayer::OnAttach()
 {
-	SteamDatagramErrMsg errMsg;
-    if (!GameNetworkingSockets_Init(nullptr, errMsg))
+	if (SteamDatagramErrMsg errMsg; !GameNetworkingSockets_Init(nullptr, errMsg))
     {
         EPPO_ERROR("Failed to initialize GameNetworkingSockets: {}", errMsg);
     }
@@ -25,8 +26,7 @@ void ClientAppLayer::OnAttach()
 
 	SteamNetworkingIPAddr ipAddr;
     ipAddr.Clear();
-	ipAddr.m_ipv4 = spec.CommandLineArgs[1];
-	
+	//ipAddr.m_ipv4 = spec.CommandLineArgs[1];
 }
 
 void ClientAppLayer::OnDetach()
@@ -49,7 +49,7 @@ void ClientAppLayer::OnUIRender()
 	// From ImGui example
 	static bool dockspaceOpen = true;
 	static bool opt_fullscreen_persistant = true;
-	bool opt_fullscreen = opt_fullscreen_persistant;
+	const bool opt_fullscreen = opt_fullscreen_persistant;
 	static ImGuiDockNodeFlags dockspace_flags = ImGuiDockNodeFlags_None;
 
 	// We are using the ImGuiWindowFlags_NoDocking flag to make the parent window not dockable into,
@@ -85,13 +85,13 @@ void ClientAppLayer::OnUIRender()
 		ImGui::PopStyleVar(2);
 
 	// Submit the DockSpace
-	ImGuiIO& io = ImGui::GetIO();
+	const ImGuiIO& io = ImGui::GetIO();
 	ImGuiStyle& style = ImGui::GetStyle();
-	float minWinSizeX = style.WindowMinSize.x;
+	const float minWinSizeX = style.WindowMinSize.x;
 	style.WindowMinSize.x = 370.0f;
 	if (io.ConfigFlags & ImGuiConfigFlags_DockingEnable)
 	{
-		ImGuiID dockspace_id = ImGui::GetID("MyDockSpace");
+		const ImGuiID dockspace_id = ImGui::GetID("MyDockSpace");
 		ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), dockspace_flags);
 	}
 
@@ -111,15 +111,9 @@ void ClientAppLayer::OnUIRender()
 		ImGui::EndMenuBar();
 	}
 
-	ImGui::Begin("Chatbox");
-	ImGui::Text("Is this how a message looks?");
+	ImGui::Begin("Login");
+	ImGui::InputText("IP Address (ip:port)", s_IPInputBuffer.As<char>(), s_IPInputBuffer.Size);
 	ImGui::End(); // Chatbox
-
-	ImGui::Begin("Users");
-	ImGui::Text("User 1");
-	ImGui::Text("User 2");
-	ImGui::Text("User 3");
-	ImGui::End(); // Users
 
 	ImGui::End(); // Dockspace
 }
