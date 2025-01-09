@@ -6,26 +6,37 @@
 
 using namespace Eppo;
 
+struct ClientInfo
+{
+    SteamNetworkingIPAddr IPAddress;
+    std::chrono::time_point<std::chrono::system_clock> TimeConnected = std::chrono::system_clock::now();
+};
+
 class ServerAppLayer : public Layer
 {
 public:
-	ServerAppLayer();
-	~ServerAppLayer() override = default;
+    ServerAppLayer();
+    ~ServerAppLayer() override = default;
 
-	void OnAttach() override;
-	void OnDetach() override;
+    void OnAttach() override;
+    void OnDetach() override;
 
-	void OnUpdate(float timestep) override;
+    void OnUpdate(float timestep) override;
 
-	void OnConnectionStatusChanged(SteamNetConnectionStatusChangedCallback_t* info);
+    void OnConnectionStatusChanged(SteamNetConnectionStatusChangedCallback_t* info);
 
-	static ServerAppLayer* Get() { return s_Instance; }
+    static ServerAppLayer* Get() { return s_Instance; }
 
 private:
-	ISteamNetworkingSockets* m_Socket;
 
-	HSteamListenSocket m_ListenSocket;
-    HSteamNetPollGroup m_PollGroup;
 
-	static ServerAppLayer* s_Instance;
+private:
+    ISteamNetworkingSockets* m_Socket;
+
+    HSteamListenSocket m_ListenSocket = k_HSteamListenSocket_Invalid;
+    HSteamNetPollGroup m_PollGroup = k_HSteamNetPollGroup_Invalid;
+
+    std::map<HSteamNetConnection, ClientInfo> m_Clients;
+
+    static ServerAppLayer* s_Instance;
 };
