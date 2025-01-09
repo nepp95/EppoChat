@@ -1,6 +1,6 @@
 #include "AppLayer.h"
 
-#include <EppoCore.h>
+#include <EppoCore/Core/Application.h>
 #include <EppoCore/Core/Entrypoint.h>
 
 using namespace Eppo;
@@ -8,10 +8,10 @@ using namespace Eppo;
 class EppoChatServer : public Application
 {
 public:
-    EppoChatServer(const ApplicationSpecification& specification)
-        : Application(specification)
+	EppoChatServer(ApplicationSpecification specification)
+		: Application(std::move(specification))
     {
-        std::shared_ptr<ServerAppLayer> layer = std::make_shared<ServerAppLayer>();
+	    const auto layer = std::make_shared<ServerAppLayer>();
 
         PushLayer(layer);
     }
@@ -19,10 +19,10 @@ public:
     ~EppoChatServer() = default;
 };
 
-Application* Eppo::CreateApplication(ApplicationCommandLineArgs args)
+Application* Eppo::CreateApplication(const ApplicationCommandLineArgs args)
 {
     ApplicationSpecification spec;
-	spec.CommandLineArgs = std::move(args);
+    spec.CommandLineArgs = args;
 	spec.Title = "EppoChatServer";
 
     return new EppoChatServer(spec);

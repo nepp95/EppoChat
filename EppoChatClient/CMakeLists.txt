@@ -1,7 +1,7 @@
-set(CMAKE_CXX_STANDARD 17)
+project(EppoChatClient VERSION 1.0 LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-set(CMAKE_VERBOSE_MAKEFILE ON)
 
 # Files
 file(GLOB_RECURSE SOURCES "Source/*.cpp")
@@ -20,4 +20,11 @@ set(INCLUDE_DIRS
 add_executable(EppoChatClient ${SOURCES})
 
 target_include_directories(EppoChatClient PRIVATE ${INCLUDE_DIRS})
-target_link_libraries(EppoChatClient PRIVATE EppoCore GameNetworkingSockets)
+target_link_libraries(EppoChatClient PRIVATE EppoCore_GUI GameNetworkingSockets)
+
+add_custom_command(
+	TARGET EppoChatClient POST_BUILD
+	COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_BINARY_DIR}/bin/GameNetworkingSockets.dll" "${CMAKE_BINARY_DIR}/EppoChatClient/GameNetworkingSockets.dll"
+	COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_BINARY_DIR}/bin/libcrypto-3-x64.dll" "${CMAKE_BINARY_DIR}/EppoChatClient/libcrypto-3-x64.dll"
+	COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_BINARY_DIR}/bin/libprotobufd.dll" "${CMAKE_BINARY_DIR}/EppoChatClient/libprotobufd.dll"
+)

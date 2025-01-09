@@ -1,6 +1,6 @@
 #pragma once
 
-#include <EppoCore.h>
+#include <EppoCore/Core/Application.h>
 #include <steam/isteamnetworkingutils.h>
 #include <steam/steamnetworkingsockets.h>
 
@@ -15,18 +15,18 @@ public:
 	void OnAttach() override;
 	void OnDetach() override;
 
-	void OnEvent(Event& e) override;
-	void OnUpdate(float timestep) override;
+    void OnUpdate(float timestep) override;
 	void OnUIRender() override;
 
-	void OnConnectionStatusChanged(SteamNetConnectionStatusChangedCallback_t* info);
+    static ClientAppLayer* Get() { return s_Instance; }
 
-	static ClientAppLayer* Get() { return s_Instance; }
+private:
+    void OnConnectionStatusChanged(SteamNetConnectionStatusChangedCallback_t* info);
+    void ConnectToServer();
 
 private:
 	ISteamNetworkingSockets* m_Socket;
-	
-	HSteamNetConnection* m_Connection;
+    HSteamNetConnection* m_Connection;
 
-	static ClientAppLayer* s_Instance;
+    static ClientAppLayer* s_Instance;
 };

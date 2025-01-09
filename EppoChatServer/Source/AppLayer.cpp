@@ -1,8 +1,5 @@
 #include "AppLayer.h"
 
-#include <EppoCore.h>
-#include <imgui/imgui.h>
-
 ServerAppLayer* ServerAppLayer::s_Instance = nullptr;
 
 static void SteamOnConnectionStatusChanged(SteamNetConnectionStatusChangedCallback_t* info)
@@ -12,21 +9,18 @@ static void SteamOnConnectionStatusChanged(SteamNetConnectionStatusChangedCallba
 
 ServerAppLayer::ServerAppLayer()
 {
-    EPPO_ASSERT(!s_Instance);
-    s_Instance = this;
+	EPPO_ASSERT(!s_Instance)
+	s_Instance = this;
 }
 
 void ServerAppLayer::OnAttach()
 {
-	SteamDatagramErrMsg errMsg;
-    if (!GameNetworkingSockets_Init(nullptr, errMsg))
-    {
-        EPPO_ERROR("Failed to initialize GameNetworkingSockets: {}", errMsg);
-    }
+	if (SteamDatagramErrMsg errMsg; !GameNetworkingSockets_Init(nullptr, errMsg))
+		EPPO_ERROR("Failed to initialize GameNetworkingSockets: {}", errMsg);
 
 	m_Socket = SteamNetworkingSockets();
 
-	const ApplicationSpecification& spec = Application::Get().GetSpecification();
+	const auto& spec = Application::Get().GetSpecification();
 
 	SteamNetworkingIPAddr ipAddr;
     ipAddr.Clear();
@@ -58,11 +52,6 @@ void ServerAppLayer::OnDetach()
 
     m_Socket->DestroyPollGroup(m_PollGroup);
     m_PollGroup = k_HSteamNetPollGroup_Invalid;
-}
-
-void ServerAppLayer::OnEvent(Event& e)
-{
-
 }
 
 void ServerAppLayer::OnUpdate(float timestep)

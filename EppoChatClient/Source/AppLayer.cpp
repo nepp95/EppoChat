@@ -1,11 +1,19 @@
 #include "AppLayer.h"
 
-#include <EppoCore.h>
+#include <EppoCore/Core/Application.h>
+#include <EppoCore/Core/Buffer.h>
 
 #include <imgui/imgui.h>
+#include <imgui/misc/cpp/imgui_stdlib.h>
+
+#include "GLFW/glfw3.h"
 
 ClientAppLayer* ClientAppLayer::s_Instance = nullptr;
-static Buffer s_IPInputBuffer(64);
+
+namespace
+{
+    Buffer s_ScratchBuffer(1024);
+}
 
 ClientAppLayer::ClientAppLayer()
 {
@@ -16,27 +24,14 @@ ClientAppLayer::ClientAppLayer()
 void ClientAppLayer::OnAttach()
 {
 	if (SteamDatagramErrMsg errMsg; !GameNetworkingSockets_Init(nullptr, errMsg))
-    {
         EPPO_ERROR("Failed to initialize GameNetworkingSockets: {}", errMsg);
-    }
 
-	m_Socket = SteamNetworkingSockets();
-
-	const ApplicationSpecification& spec = Application::Get().GetSpecification();
-
-	SteamNetworkingIPAddr ipAddr;
-    ipAddr.Clear();
-	//ipAddr.m_ipv4 = spec.CommandLineArgs[1];
+    m_Socket = SteamNetworkingSockets();
 }
 
 void ClientAppLayer::OnDetach()
 {
-
-}
-
-void ClientAppLayer::OnEvent(Event& e)
-{
-
+    s_ScratchBuffer.Release();
 }
 
 void ClientAppLayer::OnUpdate(float timestep)
@@ -97,27 +92,34 @@ void ClientAppLayer::OnUIRender()
 
 	style.WindowMinSize.x = minWinSizeX;
 
-	// Menubar
-	if (ImGui::BeginMenuBar())
-	{
-		if (ImGui::BeginMenu("File"))
-		{
-			if (ImGui::MenuItem("Close"))
-				Application::Get().Close();
+    int width, height;
+    glfwGetWindowSize(Application::Get().GetWindow().GetNativeWindow(), &width, &height);
+    int xPos, yPos;
+    glfwGetWindowPos(Application::Get().GetWindow().GetNativeWindow(), &xPos, &yPos);
 
-			ImGui::EndMenu();
-		}
+    ImGui::SetNextWindowPos(ImVec2(static_cast<float>(width) / 2.0f + xPos, static_cast<float>(height) / 2.0f + yPos), 0, ImVec2(0.5f, 0.5f));
+    constexpr ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove;
+    ImGui::Begin("Connect", &dockspaceOpen, flags);
 
-		ImGui::EndMenuBar();
-	}
+    ImGui::BeginGroup();
+    ImGui::Text("IP Address (IP:PORT)");
+    ImGui::InputText("##ipaddr", s_ScratchBuffer.As<char>(), 100);
+    if (ImGui::Button("Connect"))
+        ConnectToServer();
+    ImGui::EndGroup();
 
-	ImGui::Begin("Login");
-	ImGui::InputText("IP Address (ip:port)", s_IPInputBuffer.As<char>(), s_IPInputBuffer.Size);
-	ImGui::End(); // Chatbox
+    ImGui::End(); // Login
 
-	ImGui::End(); // Dockspace
+
+    ImGui::End(); // Dockspace
 }
 
 void ClientAppLayer::OnConnectionStatusChanged(SteamNetConnectionStatusChangedCallback_t *info)
 {
+    EPPO_INFO("Status changed");
+}
+
+void ClientAppLayer::ConnectToServer()
+{
+    const auto str = std::string(s_ScratchBuffer.As<char>(), 100);
 }
