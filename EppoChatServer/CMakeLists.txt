@@ -27,9 +27,8 @@ target_include_directories(EppoChatServer PRIVATE ${INCLUDE_DIRS})
 target_link_libraries(EppoChatServer PRIVATE EppoCore_Headless GameNetworkingSockets)
 target_compile_definitions(EppoChatServer PRIVATE EPPO_HEADLESS)
 
-add_custom_command(
-	TARGET EppoChatServer POST_BUILD
-	COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_BINARY_DIR}/bin/GameNetworkingSockets.dll" "${CMAKE_BINARY_DIR}/EppoChatServer/GameNetworkingSockets.dll"
-	COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_BINARY_DIR}/bin/libcrypto-3-x64.dll" "${CMAKE_BINARY_DIR}/EppoChatServer/libcrypto-3-x64.dll"
-	COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_BINARY_DIR}/bin/libprotobufd.dll" "${CMAKE_BINARY_DIR}/EppoChatServer/libprotobufd.dll"
+# Copy libraries to bin output
+add_custom_command(TARGET EppoChatServer POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_RUNTIME_DLLS:EppoChatServer> $<TARGET_FILE_DIR:EppoChatServer>
+    COMMAND_EXPAND_LISTS
 )

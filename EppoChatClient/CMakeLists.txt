@@ -22,9 +22,8 @@ add_executable(EppoChatClient ${SOURCES})
 target_include_directories(EppoChatClient PRIVATE ${INCLUDE_DIRS})
 target_link_libraries(EppoChatClient PRIVATE EppoCore_GUI GameNetworkingSockets)
 
-add_custom_command(
-	TARGET EppoChatClient POST_BUILD
-	COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_BINARY_DIR}/bin/GameNetworkingSockets.dll" "${CMAKE_BINARY_DIR}/EppoChatClient/GameNetworkingSockets.dll"
-	COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_BINARY_DIR}/bin/libcrypto-3-x64.dll" "${CMAKE_BINARY_DIR}/EppoChatClient/libcrypto-3-x64.dll"
-	COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_BINARY_DIR}/bin/libprotobufd.dll" "${CMAKE_BINARY_DIR}/EppoChatClient/libprotobufd.dll"
+# Copy libraries to bin output
+add_custom_command(TARGET EppoChatClient POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_RUNTIME_DLLS:EppoChatClient> $<TARGET_FILE_DIR:EppoChatClient>
+    COMMAND_EXPAND_LISTS
 )

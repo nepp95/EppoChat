@@ -1,7 +1,7 @@
 #include "AppLayer.h"
 
 #include <EppoCore/Core/Application.h>
-#include <EppoCore/Core/Buffer.h>
+#include <EppoCore/Core/BufferWriter.h>
 
 #include <imgui/imgui.h>
 #include <imgui/misc/cpp/imgui_stdlib.h>
@@ -119,11 +119,13 @@ void ClientAppLayer::OnUpdate(float timestep)
         return;
 
     // Poll messages
+    PollIncomingMessages();
 
     // Poll connection state changes
     m_Socket->RunCallbacks();
 
     // Poll user input
+    PollUserInput();
 }
 
 void ClientAppLayer::OnUIRender()
@@ -200,10 +202,26 @@ void ClientAppLayer::OnUIRender()
     ImGui::End(); // Dockspace
 }
 
+void ClientAppLayer::PollIncomingMessages()
+{
+    // Poll messages
+    ISteamNetworkingMessage* incomingMessage = nullptr;
+    const int32_t numMessages = m_Socket->ReceiveMessagesOnConnection(m_Connection, &incomingMessage, 1);
+    if (numMessages == 0)
+        return;
+    
+    if (numMessages < 0)
+    {
+        EPPO_ERROR("Failed polling incoming messages!");
+        return;
+    }
+
+    EPPO_INFO("Message received of size {}", incomingMessage->m_cbSize);
+    incomingMessage->Release();
+}
+
 void ClientAppLayer::OnConnectionStatusChanged(SteamNetConnectionStatusChangedCallback_t *info)
 {
-    EPPO_INFO("ClientAppLayer::OnConnectionStatusChanged");
-
     switch (info->m_info.m_eState)
     {
         case k_ESteamNetworkingConnectionState_None:
@@ -244,6 +262,25 @@ void ClientAppLayer::OnConnectionStatusChanged(SteamNetConnectionStatusChangedCa
         case k_ESteamNetworkingConnectionState__Force32Bit:
             break;
     }
+}
+
+void ClientAppLayer::PollUserInput()
+{
+    static bool sent = false;
+
+    if (!sent)
+    {
+        std::string str = "Hello from client!";
+
+        BufferWriter writer(s_ScratchBuffer);
+        writer.Write(const_cast<char*>(str.c_str()), sizeof(str));
+
+        m_Socket->SendMessageToConnection(m_Connection, s_ScratchBuffer.Data, writer.BytesWritten(), k_nSteamNetworkingSend_Reliable,
+                                          nullptr);
+
+        sent = true;
+    }
+
 }
 
 void ClientAppLayer::ConnectToServer()

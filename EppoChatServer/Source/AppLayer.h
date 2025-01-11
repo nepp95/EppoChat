@@ -1,6 +1,8 @@
 #pragma once
 
 #include <EppoCore/Core/Application.h>
+#include <EppoCore/Core/Buffer.h>
+
 #include <steam/isteamnetworkingutils.h>
 #include <steam/steamnetworkingsockets.h>
 
@@ -10,6 +12,12 @@ struct ClientInfo
 {
     SteamNetworkingIPAddr IPAddress;
     std::chrono::time_point<std::chrono::system_clock> TimeConnected = std::chrono::system_clock::now();
+};
+
+struct DataPacket
+{
+    HSteamNetConnection Client;
+    Buffer Data;
 };
 
 class ServerAppLayer : public Layer
@@ -23,12 +31,10 @@ public:
 
     void OnUpdate(float timestep) override;
 
+    void PollIncomingMessages();
     void OnConnectionStatusChanged(SteamNetConnectionStatusChangedCallback_t* info);
 
     static ServerAppLayer* Get() { return s_Instance; }
-
-private:
-
 
 private:
     ISteamNetworkingSockets* m_Socket;

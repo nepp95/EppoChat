@@ -1,6 +1,6 @@
 #include "AppLayer.h"
 
-#include <EppoCore/Core/Buffer.h>
+#include <EppoCore/Core/BufferReader.h>
 
 ServerAppLayer* ServerAppLayer::s_Instance = nullptr;
 
@@ -70,10 +70,7 @@ void ServerAppLayer::OnUpdate(float timestep)
         return;
 
     // Poll messages
-    ISteamNetworkingMessage* incomingMessage = nullptr;
-    const uint32_t numMessages = m_Socket->ReceiveMessagesOnPollGroup(m_PollGroup, &incomingMessage, 1);
-    if (numMessages)
-    {}
+    PollIncomingMessages();
 
     // Poll connection state changes
     m_Socket->RunCallbacks();
@@ -82,10 +79,33 @@ void ServerAppLayer::OnUpdate(float timestep)
 
 }
 
-void ServerAppLayer::OnConnectionStatusChanged(SteamNetConnectionStatusChangedCallback_t *info)
+void ServerAppLayer::PollIncomingMessages()
 {
-    EPPO_INFO("ServerAppLayer::OnConnectionStatusChanged");
+    // Poll messages
+    ISteamNetworkingMessage* incomingMessage = nullptr;
+    const int32_t numMessages = m_Socket->ReceiveMessagesOnPollGroup(m_PollGroup, &incomingMessage, 1);
+    if (numMessages == 0)
+        return;
+    
+    if (numMessages < 0)
+    {
+        EPPO_ERROR("Failed polling incoming messages!");
+        return;
+    }
 
+    // Get associated client
+    EPPO_ASSERT(incomingMessage && numMessages == 1)
+    auto client = m_Clients.find(incomingMessage->m_conn);
+    EPPO_ASSERT(client != m_Clients.end());
+
+    // Copy incoming data to scratch buffer
+    EPPO_ASSERT(s_ScratchBuffer.Size >= incomingMessage->m_cbSize)
+    s_ScratchBuffer = Buffer::Copy(incomingMessage->m_pData, incomingMessage->m_cbSize);
+    incomingMessage->Release();
+}
+
+void ServerAppLayer::OnConnectionStatusChanged(SteamNetConnectionStatusChangedCallback_t* info)
+{
     switch (info->m_info.m_eState)
     {
         case k_ESteamNetworkingConnectionState_None:
@@ -115,6 +135,9 @@ void ServerAppLayer::OnConnectionStatusChanged(SteamNetConnectionStatusChangedCa
 
             // Connection succeeded
             ClientInfo& clientInfo = m_Clients[info->m_hConn];
+            clientInfo.IPAddress = info->m_info.m_identityRemote.m_ip;
+
+            EPPO_INFO("Client {} connected to server!", info->m_hConn);
 
             break;
         }
@@ -122,6 +145,8 @@ void ServerAppLayer::OnConnectionStatusChanged(SteamNetConnectionStatusChangedCa
         case k_ESteamNetworkingConnectionState_ClosedByPeer:
         case k_ESteamNetworkingConnectionState_ProblemDetectedLocally:
         {
+            EPPO_INFO("Client {} disconnected from server!", info->m_hConn);
+
             // Ignore if client was not previously connected
             if (info->m_eOldState == k_ESteamNetworkingConnectionState_Connected)
             {
