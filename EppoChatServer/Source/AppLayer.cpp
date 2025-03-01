@@ -83,25 +83,24 @@ void ServerAppLayer::PollIncomingMessages()
 {
     // Poll messages
     ISteamNetworkingMessage* incomingMessage = nullptr;
-    const int32_t numMessages = m_Socket->ReceiveMessagesOnPollGroup(m_PollGroup, &incomingMessage, 1);
-    if (numMessages == 0)
-        return;
-    
-    if (numMessages < 0)
+    while (const int32_t numMessages = m_Socket->ReceiveMessagesOnPollGroup(m_PollGroup, &incomingMessage, 1))
     {
-        EPPO_ERROR("Failed polling incoming messages!");
-        return;
+        if (numMessages < 0)
+        {
+            EPPO_ERROR("Failed polling incoming messages!");
+            break;
+        }
+
+         // Get associated client
+        EPPO_ASSERT(incomingMessage && numMessages == 1)
+        auto client = m_Clients.find(incomingMessage->m_conn);
+        EPPO_ASSERT(client != m_Clients.end());
+
+        // Copy incoming data to scratch buffer
+        EPPO_ASSERT(static_cast<int>(s_ScratchBuffer.Size) >= incomingMessage->m_cbSize)
+        s_ScratchBuffer = Buffer::Copy(incomingMessage->m_pData, incomingMessage->m_cbSize);
+        incomingMessage->Release();
     }
-
-    // Get associated client
-    EPPO_ASSERT(incomingMessage && numMessages == 1)
-    auto client = m_Clients.find(incomingMessage->m_conn);
-    EPPO_ASSERT(client != m_Clients.end());
-
-    // Copy incoming data to scratch buffer
-    EPPO_ASSERT(s_ScratchBuffer.Size >= incomingMessage->m_cbSize)
-    s_ScratchBuffer = Buffer::Copy(incomingMessage->m_pData, incomingMessage->m_cbSize);
-    incomingMessage->Release();
 }
 
 void ServerAppLayer::OnConnectionStatusChanged(SteamNetConnectionStatusChangedCallback_t* info)

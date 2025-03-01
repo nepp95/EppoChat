@@ -8,6 +8,7 @@ file(GLOB_RECURSE SOURCES "Source/*.cpp")
 
 set(INCLUDE_DIRS
     "Source"
+    "../EppoChatCommon/Source"
     "../Vendor/EppoCore/EppoCore/Source"
     "../Vendor/EppoCore/EppoCore/Vendor"
     "../Vendor/EppoCore/EppoCore/Vendor/glm"

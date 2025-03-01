@@ -1,5 +1,6 @@
 #pragma once
 
+#include <EppoChatCommon/DataPacket.h>
 #include <EppoCore/Core/Application.h>
 #include <EppoCore/Core/Buffer.h>
 
@@ -12,12 +13,6 @@ struct ClientInfo
 {
     SteamNetworkingIPAddr IPAddress;
     std::chrono::time_point<std::chrono::system_clock> TimeConnected = std::chrono::system_clock::now();
-};
-
-struct DataPacket
-{
-    HSteamNetConnection Client;
-    Buffer Data;
 };
 
 class ServerAppLayer : public Layer

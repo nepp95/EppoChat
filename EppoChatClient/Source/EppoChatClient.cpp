@@ -8,7 +8,7 @@ using namespace Eppo;
 class EppoChatClient : public Application
 {
 public:
-    EppoChatClient(const ApplicationSpecification& specification)
+    explicit EppoChatClient(const ApplicationSpecification& specification)
         : Application(specification)
     {
         const auto layer = std::make_shared<ClientAppLayer>();

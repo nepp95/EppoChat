@@ -1,20 +1,12 @@
 #pragma once
 
+#include <EppoChatCommon/DataPacket.h>
 #include <EppoCore/Core/Application.h>
 #include <EppoCore/Core/Buffer.h>
 
-#include <steam/isteamnetworkingutils.h>
 #include <steam/steamnetworkingsockets.h>
 
-using namespace Eppo;
-
-struct DataPacket
-{
-    HSteamNetConnection Client;
-    Buffer Data;
-};
-
-class ClientAppLayer : public Layer
+class ClientAppLayer : public Eppo::Layer
 {
 public:
     ClientAppLayer();
@@ -26,7 +18,7 @@ public:
     void OnUpdate(float timestep) override;
     void OnUIRender() override;
 
-    void PollIncomingMessages();
+    void PollIncomingMessages() const;
     void OnConnectionStatusChanged(SteamNetConnectionStatusChangedCallback_t* info);
     void PollUserInput();
 
@@ -36,8 +28,19 @@ private:
     void ConnectToServer();
 
 private:
-    ISteamNetworkingSockets* m_Socket;
-    HSteamNetConnection m_Connection;
+    ISteamNetworkingSockets* m_Socket{};
+    HSteamNetConnection m_Connection{};
+
+    enum class Layout : uint8_t
+    {
+        Connect,
+        Chat
+    };
+
+    Layout m_DesiredLayout = Layout::Connect;
+    Layout m_CurrentLayout = Layout::Connect;
+
+    std::array<Eppo::ScopedBuffer, 2> m_LayoutBuffer;
 
     bool m_IsConnected = false;
 

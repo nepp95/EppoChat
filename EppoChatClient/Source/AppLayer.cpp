@@ -202,31 +202,33 @@ void ClientAppLayer::OnUIRender()
     ImGui::End(); // Dockspace
 }
 
-void ClientAppLayer::PollIncomingMessages()
+void ClientAppLayer::PollIncomingMessages() const
 {
-    // Poll messages
-    ISteamNetworkingMessage* incomingMessage = nullptr;
-    const int32_t numMessages = m_Socket->ReceiveMessagesOnConnection(m_Connection, &incomingMessage, 1);
-    if (numMessages == 0)
-        return;
-    
-    if (numMessages < 0)
+    while (true)
     {
-        EPPO_ERROR("Failed polling incoming messages!");
-        return;
-    }
+        // Poll messages
+        ISteamNetworkingMessage* incomingMessage = nullptr;
+        const int32_t numMessages = m_Socket->ReceiveMessagesOnConnection(m_Connection, &incomingMessage, 1);
 
-    EPPO_INFO("Message received of size {}", incomingMessage->m_cbSize);
-    incomingMessage->Release();
+        if (numMessages == 0)
+            break;
+
+        if (numMessages == -1)
+        {
+            EPPO_ERROR("Failed polling incoming messages!");
+            break;
+        }
+
+        EPPO_INFO("Message received of size {}", incomingMessage->m_cbSize);
+        incomingMessage->Release();
+    }
 }
 
-void ClientAppLayer::OnConnectionStatusChanged(SteamNetConnectionStatusChangedCallback_t *info)
+void ClientAppLayer::OnConnectionStatusChanged(SteamNetConnectionStatusChangedCallback_t* info)
 {
     switch (info->m_info.m_eState)
     {
         case k_ESteamNetworkingConnectionState_None:
-            break;
-
         case k_ESteamNetworkingConnectionState_Connecting:
             break;
 
@@ -270,17 +272,16 @@ void ClientAppLayer::PollUserInput()
 
     if (!sent)
     {
-        std::string str = "Hello from client!";
+        const std::string str = "Hello from client!";
 
         BufferWriter writer(s_ScratchBuffer);
-        writer.Write(const_cast<char*>(str.c_str()), sizeof(str));
+        writer.Write(const_cast<char*>(str.c_str()), str.size());
 
         m_Socket->SendMessageToConnection(m_Connection, s_ScratchBuffer.Data, writer.BytesWritten(), k_nSteamNetworkingSend_Reliable,
                                           nullptr);
 
         sent = true;
     }
-
 }
 
 void ClientAppLayer::ConnectToServer()
@@ -289,8 +290,8 @@ void ClientAppLayer::ConnectToServer()
     if (const size_t pos = str.find_last_not_of('\0'); pos != std::string::npos)
         str.resize(pos + 1);
 
-    if (const std::regex ipRegexPattern(R"(^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3}):([0-9]{1,5})$)"); !std::regex_match(
-        str, ipRegexPattern))
+    if (const std::regex ipRegexPattern(R"(^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3}):([0-9]{1,5})$)");
+        !std::regex_match(str, ipRegexPattern))
     {
         // TODO: Visual feedback
         EPPO_ERROR("Entered address does not match criteria!");
