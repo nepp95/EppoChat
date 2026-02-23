@@ -1,48 +1,66 @@
 #pragma once
 
-#include <EppoChatCommon/DataPacket.h>
+#include "EppoChatCommon/Client.h"
+#include "EppoChatCommon/DataPacket.h"
+
 #include <EppoCore/Core/Application.h>
 #include <EppoCore/Core/Buffer.h>
 
 #include <steam/steamnetworkingsockets.h>
 
-class ClientAppLayer : public Eppo::Layer
+using namespace Eppo;
+
+enum class ConnectionStatus
+{
+    NotConnected,
+    Connecting,
+    Connected,
+    FailedToConnect,
+};
+
+class ClientAppLayer : public Layer
 {
 public:
     ClientAppLayer();
     ~ClientAppLayer() override = default;
 
-    void OnAttach() override;
-    void OnDetach() override;
+    auto OnAttach() -> void override;
+    auto OnDetach() -> void override;
 
-    void OnUpdate(float timestep) override;
-    void OnUIRender() override;
+    auto OnUpdate(float timestep) -> void override;
+    auto OnEvent(Event& e) -> void override;
+    auto PreUIRender() -> void override;
+    auto OnUIRender() -> void override;
+    auto PostUIRender() -> void override;
 
-    void PollIncomingMessages() const;
-    void OnConnectionStatusChanged(SteamNetConnectionStatusChangedCallback_t* info);
-    void PollUserInput();
+    auto PollIncomingMessages() -> void;
+    auto OnConnectionStatusChanged(const SteamNetConnectionStatusChangedCallback_t* info) -> void;
 
-    static ClientAppLayer* Get() { return s_Instance; }
+    static auto Get() -> ClientAppLayer* { return s_Instance; }
 
 private:
-    void ConnectToServer();
+    auto SendMessage(Buffer buffer) const -> void;
+    auto RenderChat() -> void;
+    auto IsValidIP(const std::string& ipStr) -> bool;
 
 private:
+    // Socket
     ISteamNetworkingSockets* m_Socket{};
     HSteamNetConnection m_Connection{};
 
-    enum class Layout : uint8_t
-    {
-        Connect,
-        Chat
-    };
+    // Connection info and connection data buffer
+    ConnectionStatus m_ConnectionStatus = ConnectionStatus::NotConnected;
+    bool m_ConnectionPopupOpen = false;
+    Buffer m_ScratchBuffer;
 
-    Layout m_DesiredLayout = Layout::Connect;
-    Layout m_CurrentLayout = Layout::Connect;
+    // Client and server info
+    std::string m_Username;
+    std::string m_IPAddress;
+    SteamNetworkingIPAddr m_IPAddrSteam;
 
-    std::array<Eppo::ScopedBuffer, 2> m_LayoutBuffer;
-
-    bool m_IsConnected = false;
+    // Chat info
+    std::map<ClientID, ClientInfo> m_ConnectedClients;
+    std::map<int64_t, MessageData> m_Messages;
 
     static ClientAppLayer* s_Instance;
 };

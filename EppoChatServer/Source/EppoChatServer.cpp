@@ -8,10 +8,10 @@ using namespace Eppo;
 class EppoChatServer : public Application
 {
 public:
-	EppoChatServer(ApplicationSpecification specification)
-		: Application(std::move(specification))
+    EppoChatServer(ApplicationSpecification specification)
+        : Application(std::move(specification))
     {
-	    const auto layer = std::make_shared<ServerAppLayer>();
+        const auto layer = std::make_shared<ServerAppLayer>();
 
         PushLayer(layer);
     }
@@ -19,11 +19,11 @@ public:
     ~EppoChatServer() = default;
 };
 
-Application* Eppo::CreateApplication(const ApplicationCommandLineArgs args)
+auto Eppo::CreateApplication(const ApplicationCommandLineArgs args) -> Application*
 {
     ApplicationSpecification spec;
     spec.CommandLineArgs = args;
-	spec.Title = "EppoChatServer";
+    spec.Title = "EppoChatServer";
 
     return new EppoChatServer(spec);
 }

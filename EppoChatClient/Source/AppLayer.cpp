@@ -1,121 +1,97 @@
 #include "AppLayer.h"
 
+#include "EppoChatCommon/DataPacket.h"
+
 #include <EppoCore/Core/Application.h>
+#include <EppoCore/Core/BufferReader.h>
 #include <EppoCore/Core/BufferWriter.h>
 
-#include <imgui/imgui.h>
-#include <imgui/misc/cpp/imgui_stdlib.h>
 #include <GLFW/glfw3.h>
+#include <imgui.h>
+#include <misc/cpp/imgui_stdlib.h>
+
+#include <steam/isteamnetworkingutils.h>
 
 #include <regex>
 
 ClientAppLayer* ClientAppLayer::s_Instance = nullptr;
 
-namespace
+static auto StaticOnConnectionChanged(SteamNetConnectionStatusChangedCallback_t* info) -> void
 {
-    Buffer s_ScratchBuffer(1024);
+    ClientAppLayer::Get()->OnConnectionStatusChanged(info);
+}
 
-    void StaticOnConnectionChanged(SteamNetConnectionStatusChangedCallback_t* info)
+static auto DebugCallback(const ESteamNetworkingSocketsDebugOutputType type, const char* message) -> void
+{
+    switch (type)
     {
-        ClientAppLayer::Get()->OnConnectionStatusChanged(info);
-    }
+        case k_ESteamNetworkingSocketsDebugOutputType_None:
+            break;
 
-    void DebugCallback(ESteamNetworkingSocketsDebugOutputType type, const char* message)
-    {
-        switch (type)
+        case k_ESteamNetworkingSocketsDebugOutputType_Bug:
+        case k_ESteamNetworkingSocketsDebugOutputType_Error:
         {
-            case k_ESteamNetworkingSocketsDebugOutputType_None:
-                break;
-
-            case k_ESteamNetworkingSocketsDebugOutputType_Bug:
-            case k_ESteamNetworkingSocketsDebugOutputType_Error:
-            {
-                EPPO_ERROR(message);
-                break;
-            }
-
-            case k_ESteamNetworkingSocketsDebugOutputType_Important:
-            case k_ESteamNetworkingSocketsDebugOutputType_Warning:
-            {
-                EPPO_WARN(message);
-                break;
-            }
-
-            case k_ESteamNetworkingSocketsDebugOutputType_Msg:
-            {
-                EPPO_INFO(message);
-                break;
-            }
-
-            case k_ESteamNetworkingSocketsDebugOutputType_Verbose:
-            case k_ESteamNetworkingSocketsDebugOutputType_Debug:
-            case k_ESteamNetworkingSocketsDebugOutputType_Everything:
-            case k_ESteamNetworkingSocketsDebugOutputType__Force32Bit:
-            {
-                EPPO_TRACE(message);
-            }
-        }
-    }
-
-    SteamNetworkingIPAddr ParseIPString(const std::string& ipStr)
-    {
-        const std::regex ipRegexPattern(R"(^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3}):([0-9]{1,5})$)");
-
-        // Extract IP and port separately
-        std::smatch matches;
-        std::regex_match(ipStr, matches, ipRegexPattern);
-
-        // Extract 4 parts of the IP
-        const uint8_t i1 = static_cast<uint8_t>(std::stoi(matches[1].str()));
-        const uint8_t i2 = static_cast<uint8_t>(std::stoi(matches[2].str()));
-        const uint8_t i3 = static_cast<uint8_t>(std::stoi(matches[3].str()));
-        const uint8_t i4 = static_cast<uint8_t>(std::stoi(matches[4].str()));
-        const uint16_t port = static_cast<uint16_t>(std::stoi(matches[5].str()));
-
-        if (i1 > UINT8_MAX || i2 > UINT8_MAX || i3 > UINT8_MAX || i4 > UINT8_MAX || port > UINT16_MAX)
-        {
-            EPPO_ERROR("Invalid IP address entered!");
-            return {};
+            Log::Error("{}", message);
+            break;
         }
 
-        const uint32_t ip = i1 << 24 | i2 << 16 | i3 << 8 | i4;
+        case k_ESteamNetworkingSocketsDebugOutputType_Important:
+        case k_ESteamNetworkingSocketsDebugOutputType_Warning:
+        {
+            Log::Warn("{}", message);
+            break;
+        }
 
-        SteamNetworkingIPAddr ipAddr{};
-        ipAddr.SetIPv4(ip, port);
+        case k_ESteamNetworkingSocketsDebugOutputType_Msg:
+        {
+            Log::Info("{}", message);
+            break;
+        }
 
-        return ipAddr;
+        case k_ESteamNetworkingSocketsDebugOutputType_Verbose:
+        case k_ESteamNetworkingSocketsDebugOutputType_Debug:
+        case k_ESteamNetworkingSocketsDebugOutputType_Everything:
+        case k_ESteamNetworkingSocketsDebugOutputType__Force32Bit:
+        {
+            Log::Trace("{}", message);
+            break;
+        }
     }
 }
 
 ClientAppLayer::ClientAppLayer()
 {
-    EPPO_ASSERT(!s_Instance)
+    EP_ASSERT(!s_Instance);
     s_Instance = this;
+
+    // Initialize scratch buffer
+    m_ScratchBuffer.Allocate(MAX_PAYLOAD_SIZE);
 }
 
-void ClientAppLayer::OnAttach()
+auto ClientAppLayer::OnAttach() -> void
 {
+    // Initialize networking
     if (SteamDatagramErrMsg errMsg; !GameNetworkingSockets_Init(nullptr, errMsg))
-        EPPO_ERROR("Failed to initialize GameNetworkingSockets: {}", errMsg);
+        Log::Error("Failed to initialize GameNetworkingSockets: {}", errMsg);
 
-    #ifdef EPPO_DEBUG
+#ifdef EP_DEBUG
     SteamNetworkingUtils()->SetDebugOutputFunction(k_ESteamNetworkingSocketsDebugOutputType_Debug, DebugCallback);
-    #else
+#else
     SteamNetworkingUtils()->SetDebugOutputFunction(k_ESteamNetworkingSocketsDebugOutputType_Msg, DebugCallback);
-    #endif
+#endif
 
     m_Socket = SteamNetworkingSockets();
 }
 
-void ClientAppLayer::OnDetach()
+auto ClientAppLayer::OnDetach() -> void
 {
-    s_ScratchBuffer.Release();
+    m_ScratchBuffer.Release();
     GameNetworkingSockets_Kill();
 }
 
-void ClientAppLayer::OnUpdate(float timestep)
+auto ClientAppLayer::OnUpdate(float timestep) -> void
 {
-    if (!m_IsConnected)
+    if (m_ConnectionStatus != ConnectionStatus::Connected)
         return;
 
     // Poll messages
@@ -123,86 +99,139 @@ void ClientAppLayer::OnUpdate(float timestep)
 
     // Poll connection state changes
     m_Socket->RunCallbacks();
-
-    // Poll user input
-    PollUserInput();
 }
 
-void ClientAppLayer::OnUIRender()
+auto ClientAppLayer::OnEvent(Event& e) -> void
 {
-    // From ImGui example
-    static bool dockspaceOpen = true;
-    static bool opt_fullscreen_persistant = true;
-    const bool opt_fullscreen = opt_fullscreen_persistant;
-    static ImGuiDockNodeFlags dockspace_flags = ImGuiDockNodeFlags_None;
+}
+
+auto ClientAppLayer::PreUIRender() -> void
+{
+}
+
+auto ClientAppLayer::OnUIRender() -> void
+{
+    // Derived from ImGui demo
+    static bool s_Open = true;
+    static constexpr bool s_Fullscreen = true;
+    static constexpr bool s_Padding = false;
+    static ImGuiDockNodeFlags s_DockspaceFlags = ImGuiDockNodeFlags_None;
 
     // We are using the ImGuiWindowFlags_NoDocking flag to make the parent window not dockable into,
     // because it would be confusing to have two docking targets within each others.
-    ImGuiWindowFlags window_flags = ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoDocking;
-    if (opt_fullscreen)
+    ImGuiWindowFlags windowFlags = ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoDocking;
+    if (s_Fullscreen)
     {
         const ImGuiViewport* viewport = ImGui::GetMainViewport();
-        ImGui::SetNextWindowPos(viewport->Pos);
-        ImGui::SetNextWindowSize(viewport->Size);
+        ImGui::SetNextWindowPos(viewport->WorkPos);
+        ImGui::SetNextWindowSize(viewport->WorkSize);
         ImGui::SetNextWindowViewport(viewport->ID);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
-        window_flags |= ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove;
-        window_flags |= ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus;
+        windowFlags |= ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+            ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus;
+    }
+    else
+    {
+        s_DockspaceFlags &= ~ImGuiDockNodeFlags_PassthruCentralNode;
     }
 
     // When using ImGuiDockNodeFlags_PassthruCentralNode, DockSpace() will render our background
     // and handle the pass-thru hole, so we ask Begin() to not render a background.
-    if (dockspace_flags & ImGuiDockNodeFlags_PassthruCentralNode)
-        window_flags |= ImGuiWindowFlags_NoBackground;
+    if (s_DockspaceFlags & ImGuiDockNodeFlags_PassthruCentralNode)
+        windowFlags |= ImGuiWindowFlags_NoBackground;
 
     // Important: note that we proceed even if Begin() returns false (aka window is collapsed).
     // This is because we want to keep our DockSpace() active. If a DockSpace() is inactive,
     // all active windows docked into it will lose their parent and become undocked.
     // We cannot preserve the docking relationship between an active window and an inactive docking, otherwise
     // any change of dockspace/settings would lead to windows being stuck in limbo and never being visible.
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
-    ImGui::Begin("Dockspace", &dockspaceOpen, window_flags);
-    ImGui::PopStyleVar();
+    if (!s_Padding)
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
 
-    if (opt_fullscreen)
+    ImGui::Begin("Dockspace", &s_Open, windowFlags);
+
+    if (!s_Padding)
+        ImGui::PopStyleVar();
+    if (s_Fullscreen)
         ImGui::PopStyleVar(2);
 
-    // Submit the DockSpace
-    const ImGuiIO& io = ImGui::GetIO();
-    ImGuiStyle& style = ImGui::GetStyle();
-    const float minWinSizeX = style.WindowMinSize.x;
-    style.WindowMinSize.x = 370.0f;
-    if (io.ConfigFlags & ImGuiConfigFlags_DockingEnable)
+    // Submit the dockspace
+    if (const ImGuiIO& io = ImGui::GetIO(); io.ConfigFlags & ImGuiConfigFlags_DockingEnable)
     {
-        const ImGuiID dockspace_id = ImGui::GetID("MyDockSpace");
-        ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), dockspace_flags);
+        const ImGuiID dockspaceId = ImGui::GetID("MyDockspace");
+        ImGui::DockSpace(dockspaceId, ImVec2(0.0f, 0.0f), s_DockspaceFlags);
     }
 
-    style.WindowMinSize.x = minWinSizeX;
+    // Main window
+    if (m_ConnectionStatus != ConnectionStatus::Connected && !m_ConnectionPopupOpen)
+    {
+        ImGui::OpenPopup("Connect To Server");
+    }
 
-    int width, height;
-    glfwGetWindowSize(Application::Get().GetWindow().GetNativeWindow(), &width, &height);
-    int xPos, yPos;
-    glfwGetWindowPos(Application::Get().GetWindow().GetNativeWindow(), &xPos, &yPos);
+    m_ConnectionPopupOpen = ImGui::BeginPopupModal("Connect To Server", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
+    if (m_ConnectionPopupOpen)
+    {
+        ImGui::Text("Username");
+        ImGui::InputText("##username", &m_Username);
 
-    ImGui::SetNextWindowPos(ImVec2(static_cast<float>(width) / 2.0f + xPos, static_cast<float>(height) / 2.0f + yPos), 0, ImVec2(0.5f, 0.5f));
-    constexpr ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove;
-    ImGui::Begin("Connect", &dockspaceOpen, flags);
+        ImGui::Text("IP Address (IP:PORT)");
+        ImGui::InputText("##ipaddr", &m_IPAddress);
 
-    ImGui::BeginGroup();
-    ImGui::Text("IP Address (IP:PORT)");
-    ImGui::InputText("##ipaddr", s_ScratchBuffer.As<char>(), 100);
-    if (ImGui::Button("Connect"))
-        ConnectToServer();
-    ImGui::EndGroup();
+        if (ImGui::Button("Connect"))
+        {
+            if (IsValidIP(m_IPAddress))
+            {
+                // Connect to server
+                SteamNetworkingConfigValue_t options{};
+                options.SetPtr(k_ESteamNetworkingConfig_Callback_ConnectionStatusChanged, (void*)StaticOnConnectionChanged);
 
-    ImGui::End(); // Login
+                Log::Info("Connecting to {}", m_IPAddress);
+                m_Connection = m_Socket->ConnectByIPAddress(m_IPAddrSteam, 1, &options);
+                if (m_Connection == k_HSteamNetConnection_Invalid)
+                    Log::Error("Failed to connect!");
+                else
+                {
+                    m_ConnectionStatus = ConnectionStatus::Connected;
+                }
+            }
+        }
+
+        if (m_ConnectionStatus == ConnectionStatus::Connected)
+        {
+            // Send connection request
+            BufferWriter writer;
+            writer.WriteRaw<PacketType>(PacketType::ConnectionRequest);
+            writer.WriteString(m_Username);
+
+            const auto buffer = writer.GetBuffer();
+            SendMessage(buffer);
+
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::EndPopup();
+    }
+
+    ImGui::Begin("Users");
+
+    for (const auto& [clientId, clientInfo] : m_ConnectedClients)
+        ImGui::Text(clientInfo.Username.c_str());
+
+    ImGui::End(); // Users
+
+    ImGui::Begin("Chat");
+    RenderChat();
+    ImGui::End(); // Chat
 
     ImGui::End(); // Dockspace
 }
 
-void ClientAppLayer::PollIncomingMessages() const
+auto ClientAppLayer::PostUIRender() -> void
+{
+}
+
+auto ClientAppLayer::PollIncomingMessages() -> void
 {
     while (true)
     {
@@ -215,16 +244,70 @@ void ClientAppLayer::PollIncomingMessages() const
 
         if (numMessages == -1)
         {
-            EPPO_ERROR("Failed polling incoming messages!");
+            Log::Error("Failed polling incoming messages!");
             break;
         }
 
-        EPPO_INFO("Message received of size {}", incomingMessage->m_cbSize);
+        // Copy incoming data to scratch buffer
+        if (m_ScratchBuffer.Size < incomingMessage->m_cbSize && incomingMessage->m_cbSize < UINT64_MAX)
+            m_ScratchBuffer.Allocate(incomingMessage->m_cbSize);
+        std::memset(m_ScratchBuffer.Data, 0, m_ScratchBuffer.Size);
+        std::memcpy(m_ScratchBuffer.Data, incomingMessage->m_pData, incomingMessage->m_cbSize);
         incomingMessage->Release();
+
+        // Process incoming data
+        BufferReader reader(m_ScratchBuffer);
+
+        // Get packet type
+        PacketType type;
+        const bool success = reader.ReadRaw<PacketType>(type);
+        EP_ASSERT(success);
+
+        // Process packet payload
+        switch (type)
+        {
+            case PacketType::ConnectionRequest:
+            {
+                bool acceptedConnection;
+                reader.ReadRaw<bool>(acceptedConnection);
+
+                if (!acceptedConnection)
+                    Log::Error("Failed to connect because of invalid username");
+
+                break;
+            }
+
+            case PacketType::ClientList:
+            {
+                std::map<ClientID, ClientInfo> clients;
+                reader.ReadMap<ClientID, ClientInfo>(clients);
+
+                m_ConnectedClients = clients;
+
+                break;
+            }
+
+            case PacketType::Message:
+            {
+                std::map<int64_t, MessageData> messages;
+                reader.ReadMap<int64_t, MessageData>(messages);
+                EP_ASSERT(!messages.empty());
+
+                if (messages.size() > 1)
+                    m_Messages = messages;
+                else
+                {
+                    const auto message = messages.begin();
+                    m_Messages.insert_or_assign(message->first, message->second);
+                }
+
+                break;
+            }
+        }
     }
 }
 
-void ClientAppLayer::OnConnectionStatusChanged(SteamNetConnectionStatusChangedCallback_t* info)
+auto ClientAppLayer::OnConnectionStatusChanged(const SteamNetConnectionStatusChangedCallback_t* info) -> void
 {
     switch (info->m_info.m_eState)
     {
@@ -234,7 +317,6 @@ void ClientAppLayer::OnConnectionStatusChanged(SteamNetConnectionStatusChangedCa
 
         case k_ESteamNetworkingConnectionState_Connected:
         {
-            EPPO_INFO("Connected to server!");
             break;
         }
 
@@ -252,7 +334,7 @@ void ClientAppLayer::OnConnectionStatusChanged(SteamNetConnectionStatusChangedCa
 
             m_Socket->CloseConnection(info->m_hConn, 0, nullptr, false);
             m_Connection = k_HSteamNetConnection_Invalid;
-            m_IsConnected = false;
+            m_ConnectionStatus = ConnectionStatus::NotConnected;
 
             break;
         }
@@ -266,47 +348,111 @@ void ClientAppLayer::OnConnectionStatusChanged(SteamNetConnectionStatusChangedCa
     }
 }
 
-void ClientAppLayer::PollUserInput()
+auto ClientAppLayer::SendMessage(const Buffer buffer) const -> void
 {
-    static bool sent = false;
-
-    if (!sent)
-    {
-        const std::string str = "Hello from client!";
-
-        BufferWriter writer(s_ScratchBuffer);
-        writer.Write(const_cast<char*>(str.c_str()), str.size());
-
-        m_Socket->SendMessageToConnection(m_Connection, s_ScratchBuffer.Data, writer.BytesWritten(), k_nSteamNetworkingSend_Reliable,
-                                          nullptr);
-
-        sent = true;
-    }
+    EP_ASSERT(buffer.Size <= UINT32_MAX); // Below method only accepts up to the max size of 32 bit uint as size
+    auto result = m_Socket->SendMessageToConnection(m_Connection, buffer.Data, static_cast<uint32_t>(buffer.Size), 0, nullptr);
 }
 
-void ClientAppLayer::ConnectToServer()
+auto ClientAppLayer::RenderChat() -> void
 {
-    auto str = std::string(s_ScratchBuffer.As<char>(), 100);
-    if (const size_t pos = str.find_last_not_of('\0'); pos != std::string::npos)
-        str.resize(pos + 1);
+    static bool s_AutoScroll = true;
+    static std::string s_InputMessage;
 
-    if (const std::regex ipRegexPattern(R"(^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3}):([0-9]{1,5})$)");
-        !std::regex_match(str, ipRegexPattern))
+    if (ImGui::BeginPopup("Options"))
     {
-        // TODO: Visual feedback
-        EPPO_ERROR("Entered address does not match criteria!");
-        return;
+        ImGui::Checkbox("Auto-scroll", &s_AutoScroll);
+        ImGui::EndPopup();
     }
 
-    const SteamNetworkingIPAddr ipAddr = ParseIPString(str);
+    if (ImGui::Button("Options"))
+        ImGui::OpenPopup("Options");
 
-    SteamNetworkingConfigValue_t options{};
-    options.SetPtr(k_ESteamNetworkingConfig_Callback_ConnectionStatusChanged, (void*)StaticOnConnectionChanged);
+    ImGui::Separator();
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f, 1.0f));
 
-    EPPO_INFO("Connecting to {}", str);
-    m_Connection = m_Socket->ConnectByIPAddress(ipAddr, 1, &options);
-    if (m_Connection == k_HSteamNetConnection_Invalid)
-        EPPO_ERROR("Failed to connect!");
-    else
-        m_IsConnected = true;
+    constexpr ImGuiTableFlags tableFlags = ImGuiTableFlags_None;
+    if (ImGui::BeginTable("##Messages", 2, tableFlags))
+    {
+        ImGui::TableSetupColumn("#1st", ImGuiTableColumnFlags_WidthStretch, 1.0f);
+        ImGui::TableSetupColumn("#2nd", ImGuiTableColumnFlags_WidthStretch, 4.0f);
+
+        for (const auto& [timestamp, message] : m_Messages)
+        {
+            using namespace std::chrono;
+            const sys_time utcTime{ milliseconds(timestamp) };
+            auto localSeconds = time_point_cast<seconds>(current_zone()->to_local(utcTime));
+            zoned_time localTime{ current_zone(), localSeconds };
+            const std::string timestampStr = std::format("{:%H:%M:%S}", localTime);
+
+            ImGui::TableNextColumn();
+            ImGui::Text("%s", message.Username.c_str());
+            ImGui::Text(timestampStr.c_str());
+            ImGui::TableNextColumn();
+            ImGui::Text(message.Message.c_str());
+            ImGui::TableNextRow();
+        }
+
+        ImGui::EndTable();
+    }
+
+    if (s_AutoScroll && ImGui::GetScrollY() >= ImGui::GetScrollMaxY())
+        ImGui::SetScrollHereY(1.0f);
+
+    ImGui::PopStyleVar();
+    ImGui::Separator();
+
+    ImGuiInputTextFlags inputFlags = ImGuiInputTextFlags_EnterReturnsTrue;
+    if (ImGui::InputText("Input", &s_InputMessage, inputFlags))
+    {
+        using namespace std::chrono;
+
+        const auto now = system_clock::now();
+        const int64_t tp = time_point_cast<milliseconds>(now).time_since_epoch().count();
+
+        BufferWriter writer;
+        writer.WriteRaw<PacketType>(PacketType::Message);
+        writer.WriteRaw<int64_t>(tp);
+        writer.WriteString(s_InputMessage);
+
+        SendMessage(writer.GetBuffer());
+
+        MessageData message{
+            .UserID = m_Connection,
+            .Timestamp = tp,
+            .Username = m_Username,
+            .Message = s_InputMessage,
+        };
+
+        m_Messages.insert_or_assign(tp, message);
+        s_InputMessage.clear();
+    }
+
+    ImGui::SetItemDefaultFocus();
+}
+
+auto ClientAppLayer::IsValidIP(const std::string& ipStr) -> bool
+{
+    const std::regex ipRegexPattern(R"(^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3}):([0-9]{1,5})$)");
+
+    // Extract IP and port separately
+    std::smatch matches;
+    std::regex_match(ipStr, matches, ipRegexPattern);
+
+    const uint8_t i1 = static_cast<uint8_t>(std::stoi(matches[1].str()));
+    const uint8_t i2 = static_cast<uint8_t>(std::stoi(matches[2].str()));
+    const uint8_t i3 = static_cast<uint8_t>(std::stoi(matches[3].str()));
+    const uint8_t i4 = static_cast<uint8_t>(std::stoi(matches[4].str()));
+    const uint16_t port = static_cast<uint16_t>(std::stoi(matches[5].str()));
+
+    if (i1 > UINT8_MAX || i2 > UINT8_MAX || i3 > UINT8_MAX || i4 > UINT8_MAX || port > UINT16_MAX)
+    {
+        Log::Error("Invalid IP address entered!");
+        return false;
+    }
+
+    const uint32_t ip = i1 << 24 | i2 << 16 | i3 << 8 | i4;
+    m_IPAddrSteam.SetIPv4(ip, port);
+
+    return true;
 }

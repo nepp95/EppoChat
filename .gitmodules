@@ -1,6 +1,0 @@
-[submodule "Vendor/GameNetworkingSockets"]
-	path = Vendor/GameNetworkingSockets
-	url = https://github.com/nepp95/GameNetworkingSockets.git
-[submodule "Vendor/EppoCore"]
-	path = Vendor/EppoCore
-	url = https://github.com/nepp95/EppoCore.git

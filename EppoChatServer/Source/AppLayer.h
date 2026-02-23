@@ -1,18 +1,19 @@
 #pragma once
 
-#include <EppoChatCommon/DataPacket.h>
+#include "EppoChatCommon/Client.h"
+#include "EppoChatCommon/DataPacket.h"
+
 #include <EppoCore/Core/Application.h>
 #include <EppoCore/Core/Buffer.h>
 
-#include <steam/isteamnetworkingutils.h>
 #include <steam/steamnetworkingsockets.h>
 
 using namespace Eppo;
 
-struct ClientInfo
+enum class DisconnectReason
 {
-    SteamNetworkingIPAddr IPAddress;
-    std::chrono::time_point<std::chrono::system_clock> TimeConnected = std::chrono::system_clock::now();
+    ServerClosed = 0,
+    Kicked = 1,
 };
 
 class ServerAppLayer : public Layer
@@ -29,15 +30,23 @@ public:
     void PollIncomingMessages();
     void OnConnectionStatusChanged(SteamNetConnectionStatusChangedCallback_t* info);
 
-    static ServerAppLayer* Get() { return s_Instance; }
+    static auto Get() -> ServerAppLayer* { return s_Instance; }
+
+private:
+    auto SendMessage(ClientID clientId, Buffer buffer) -> void;
+    auto SendClientList(ClientID clientId) -> void;
+    auto SendMessageHistory(ClientID clientId) -> void;
+    auto SendWelcomeMessage(ClientID clientId) -> void;
+    auto IsValidUsername(std::string_view username) -> bool;
 
 private:
     ISteamNetworkingSockets* m_Socket;
-
     HSteamListenSocket m_ListenSocket = k_HSteamListenSocket_Invalid;
     HSteamNetPollGroup m_PollGroup = k_HSteamNetPollGroup_Invalid;
 
-    std::map<HSteamNetConnection, ClientInfo> m_Clients;
+    std::map<ClientID, ClientInfo> m_Clients;
+    std::map<int64_t, MessageData> m_Messages;
+    Buffer m_ScratchBuffer;
 
     static ServerAppLayer* s_Instance;
 };
