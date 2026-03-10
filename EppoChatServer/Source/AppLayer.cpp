@@ -340,15 +340,14 @@ auto ServerAppLayer::IsValidUsername(const std::string& username) -> bool
 
     std::ranges::transform(
         requestedName, requestedName.begin(),
-        [](const unsigned char c)
+        [](const unsigned char c) -> char
         {
             return static_cast<char>(std::tolower(c));
         }
     );
 
     // Reserved names
-    constexpr std::array reservedNames = { "admin", "moderator", "root" };
-    for (const auto& reservedName : reservedNames)
+    for (constexpr std::array reservedNames = { "admin", "moderator", "root" }; const auto& reservedName : reservedNames)
     {
         if (requestedName == reservedName)
             return false;

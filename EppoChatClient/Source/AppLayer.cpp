@@ -390,7 +390,8 @@ auto ClientAppLayer::OnConnectionStatusChanged(const SteamNetConnectionStatusCha
 auto ClientAppLayer::SendMessage(const Buffer buffer) const -> void
 {
     EP_ASSERT(buffer.Size <= UINT32_MAX); // Below method only accepts up to the max size of 32 bit uint as size
-    auto result = m_Socket->SendMessageToConnection(m_Connection, buffer.Data, static_cast<uint32_t>(buffer.Size), 0, nullptr);
+    const auto result = m_Socket->SendMessageToConnection(m_Connection, buffer.Data, static_cast<uint32_t>(buffer.Size), 0, nullptr);
+    EP_ASSERT(result == k_EResultOK);
 }
 
 auto ClientAppLayer::RenderChat() -> void
@@ -410,25 +411,40 @@ auto ClientAppLayer::RenderChat() -> void
     ImGui::Separator();
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f, 1.0f));
 
-    constexpr ImGuiTableFlags tableFlags = ImGuiTableFlags_None;
-    if (ImGui::BeginTable("##Messages", 2, tableFlags))
+    if (constexpr ImGuiTableFlags tableFlags = ImGuiTableFlags_None; ImGui::BeginTable("##Messages", 2, tableFlags))
     {
         ImGui::TableSetupColumn("#1st", ImGuiTableColumnFlags_WidthStretch, 1.0f);
         ImGui::TableSetupColumn("#2nd", ImGuiTableColumnFlags_WidthStretch, 4.0f);
 
         for (const auto& [id, timestamp, username, message] : m_Messages)
         {
+            // Convert timestamp to local time
             using namespace std::chrono;
             const sys_time utcTime{ milliseconds(timestamp) };
             auto localSeconds = time_point_cast<seconds>(current_zone()->to_local(utcTime));
             zoned_time localTime{ current_zone(), localSeconds };
             const std::string timestampStr = std::format("{:%H:%M:%S}", localTime);
 
+            // Convert username to lowercase for easier comparison
+            std::string requestedName = username;
+
+            std::ranges::transform(
+                requestedName, requestedName.begin(),
+                [](const unsigned char c) -> char
+                {
+                    return static_cast<char>(std::tolower(c));
+                }
+            );
+
             ImGui::TableNextColumn();
             ImGui::Text("%s", username.c_str());
-            ImGui::Text(timestampStr.c_str());
+            ImGui::Text(timestampStr.c_str()); // Data gets copied -> safe
             ImGui::TableNextColumn();
-            ImGui::Text(message.c_str());
+            if (requestedName == "admin" || requestedName == "moderator" || requestedName == "root")
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.1f, 0.1f, 1.0f));
+            ImGui::Text(message.c_str()); // Data gets copied -> safe
+            if (requestedName == "admin" || requestedName == "moderator" || requestedName == "root")
+                ImGui::PopStyleColor();
             ImGui::TableNextRow();
         }
 
@@ -441,8 +457,8 @@ auto ClientAppLayer::RenderChat() -> void
     ImGui::PopStyleVar();
     ImGui::Separator();
 
-    constexpr ImGuiInputTextFlags inputFlags = ImGuiInputTextFlags_EnterReturnsTrue;
-    if (ImGui::InputText("Input", &s_InputMessage, inputFlags))
+    if (constexpr ImGuiInputTextFlags inputFlags = ImGuiInputTextFlags_EnterReturnsTrue;
+        ImGui::InputText("Input", &s_InputMessage, inputFlags))
     {
         using namespace std::chrono;
 
