@@ -8,6 +8,8 @@
 
 #include <steam/steamnetworkingsockets.h>
 
+#include <deque>
+
 using namespace Eppo;
 
 enum class DisconnectReason
@@ -33,11 +35,10 @@ public:
     static auto Get() -> ServerAppLayer* { return s_Instance; }
 
 private:
-    auto SendMessage(ClientID clientId, Buffer buffer) -> void;
-    auto SendClientList(ClientID clientId) -> void;
-    auto SendMessageHistory(ClientID clientId) -> void;
-    auto SendWelcomeMessage(ClientID clientId) -> void;
-    auto IsValidUsername(std::string_view username) -> bool;
+    auto SendMessage(ClientID clientId, Buffer buffer) const -> void;
+    auto SendClientList(ClientID clientId) const -> void;
+    auto SendWelcomeMessage(ClientID clientId) const -> void;
+    auto IsValidUsername(const std::string& username) -> bool;
 
 private:
     ISteamNetworkingSockets* m_Socket;
@@ -45,7 +46,7 @@ private:
     HSteamNetPollGroup m_PollGroup = k_HSteamNetPollGroup_Invalid;
 
     std::map<ClientID, ClientInfo> m_Clients;
-    std::map<int64_t, MessageData> m_Messages;
+    std::vector<MessageData> m_Messages;
     Buffer m_ScratchBuffer;
 
     static ServerAppLayer* s_Instance;

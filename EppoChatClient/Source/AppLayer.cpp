@@ -215,7 +215,7 @@ auto ClientAppLayer::OnUIRender() -> void
 
     ImGui::Begin("Users");
 
-    for (const auto& [clientId, clientInfo] : m_ConnectedClients)
+    for (const auto& clientInfo : m_ConnectedClients | std::views::values)
         ImGui::Text(clientInfo.Username.c_str());
 
     ImGui::End(); // Users
@@ -249,7 +249,7 @@ auto ClientAppLayer::PollIncomingMessages() -> void
         }
 
         // Copy incoming data to scratch buffer
-        if (m_ScratchBuffer.Size < incomingMessage->m_cbSize && incomingMessage->m_cbSize < UINT64_MAX)
+        if (std::cmp_less(m_ScratchBuffer.Size, incomingMessage->m_cbSize) && incomingMessage->m_cbSize < UINT64_MAX)
             m_ScratchBuffer.Allocate(incomingMessage->m_cbSize);
         std::memset(m_ScratchBuffer.Data, 0, m_ScratchBuffer.Size);
         std::memcpy(m_ScratchBuffer.Data, incomingMessage->m_pData, incomingMessage->m_cbSize);
@@ -266,6 +266,51 @@ auto ClientAppLayer::PollIncomingMessages() -> void
         // Process packet payload
         switch (type)
         {
+            case PacketType::ClientList:
+            {
+                std::map<ClientID, ClientInfo> clients;
+                reader.ReadMap<ClientID, ClientInfo>(clients);
+
+                m_ConnectedClients = clients;
+
+                break;
+            }
+
+            case PacketType::ClientTyping:
+            {
+                ClientID id;
+                bool isTyping;
+
+                reader.ReadRaw<ClientID>(id);
+                reader.ReadRaw<bool>(isTyping);
+
+                if (m_ConnectedClients.contains(id))
+                    m_ConnectedClients.at(id).IsTyping = isTyping;
+
+                break;
+            }
+
+            case PacketType::ClientConnected:
+            {
+                ClientID id;
+                std::string username;
+
+                reader.ReadRaw<ClientID>(id);
+                reader.ReadString(username);
+
+                if (!m_ConnectedClients.contains(id))
+                    m_ConnectedClients[id] = ClientInfo{ .Username = username };
+            }
+
+            case PacketType::ClientQuit:
+            {
+                ClientID id;
+                reader.ReadRaw<ClientID>(id);
+
+                if (m_ConnectedClients.contains(id))
+                    m_ConnectedClients.erase(id);
+            }
+
             case PacketType::ConnectionRequest:
             {
                 bool acceptedConnection;
@@ -277,29 +322,23 @@ auto ClientAppLayer::PollIncomingMessages() -> void
                 break;
             }
 
-            case PacketType::ClientList:
-            {
-                std::map<ClientID, ClientInfo> clients;
-                reader.ReadMap<ClientID, ClientInfo>(clients);
 
-                m_ConnectedClients = clients;
+            case PacketType::Message:
+            {
+                MessageData messageData;
+                reader.ReadObject<MessageData>(messageData);
+
+                m_Messages.emplace_back(messageData);
 
                 break;
             }
 
-            case PacketType::Message:
+            case PacketType::Error:
             {
-                std::map<int64_t, MessageData> messages;
-                reader.ReadMap<int64_t, MessageData>(messages);
-                EP_ASSERT(!messages.empty());
+                std::string error;
+                reader.ReadString(error);
 
-                if (messages.size() > 1)
-                    m_Messages = messages;
-                else
-                {
-                    const auto message = messages.begin();
-                    m_Messages.insert_or_assign(message->first, message->second);
-                }
+                Log::Error("{}", error);
 
                 break;
             }
@@ -377,7 +416,7 @@ auto ClientAppLayer::RenderChat() -> void
         ImGui::TableSetupColumn("#1st", ImGuiTableColumnFlags_WidthStretch, 1.0f);
         ImGui::TableSetupColumn("#2nd", ImGuiTableColumnFlags_WidthStretch, 4.0f);
 
-        for (const auto& [timestamp, message] : m_Messages)
+        for (const auto& [id, timestamp, username, message] : m_Messages)
         {
             using namespace std::chrono;
             const sys_time utcTime{ milliseconds(timestamp) };
@@ -386,10 +425,10 @@ auto ClientAppLayer::RenderChat() -> void
             const std::string timestampStr = std::format("{:%H:%M:%S}", localTime);
 
             ImGui::TableNextColumn();
-            ImGui::Text("%s", message.Username.c_str());
+            ImGui::Text("%s", username.c_str());
             ImGui::Text(timestampStr.c_str());
             ImGui::TableNextColumn();
-            ImGui::Text(message.Message.c_str());
+            ImGui::Text(message.c_str());
             ImGui::TableNextRow();
         }
 
@@ -402,7 +441,7 @@ auto ClientAppLayer::RenderChat() -> void
     ImGui::PopStyleVar();
     ImGui::Separator();
 
-    ImGuiInputTextFlags inputFlags = ImGuiInputTextFlags_EnterReturnsTrue;
+    constexpr ImGuiInputTextFlags inputFlags = ImGuiInputTextFlags_EnterReturnsTrue;
     if (ImGui::InputText("Input", &s_InputMessage, inputFlags))
     {
         using namespace std::chrono;
@@ -410,21 +449,20 @@ auto ClientAppLayer::RenderChat() -> void
         const auto now = system_clock::now();
         const int64_t tp = time_point_cast<milliseconds>(now).time_since_epoch().count();
 
-        BufferWriter writer;
-        writer.WriteRaw<PacketType>(PacketType::Message);
-        writer.WriteRaw<int64_t>(tp);
-        writer.WriteString(s_InputMessage);
-
-        SendMessage(writer.GetBuffer());
-
-        MessageData message{
+        const MessageData messageData{
             .UserID = m_Connection,
             .Timestamp = tp,
             .Username = m_Username,
             .Message = s_InputMessage,
         };
 
-        m_Messages.insert_or_assign(tp, message);
+        BufferWriter writer;
+        writer.WriteRaw<PacketType>(PacketType::Message);
+        writer.WriteObject<MessageData>(messageData);
+
+        SendMessage(writer.GetBuffer());
+
+        m_Messages.emplace_back(messageData);
         s_InputMessage.clear();
     }
 

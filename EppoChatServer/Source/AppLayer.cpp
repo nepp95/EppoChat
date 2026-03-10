@@ -54,8 +54,6 @@ void ServerAppLayer::OnDetach()
         m_Socket->CloseConnection(connection, static_cast<int>(DisconnectReason::ServerClosed), nullptr, true);
     }
 
-    m_ScratchBuffer.Release();
-
     m_Socket->CloseListenSocket(m_ListenSocket);
     m_ListenSocket = k_HSteamListenSocket_Invalid;
 
@@ -63,6 +61,7 @@ void ServerAppLayer::OnDetach()
     m_PollGroup = k_HSteamNetPollGroup_Invalid;
 
     GameNetworkingSockets_Kill();
+    m_ScratchBuffer.Release();
 }
 
 void ServerAppLayer::OnUpdate(float timestep)
@@ -79,11 +78,12 @@ void ServerAppLayer::OnUpdate(float timestep)
     // Update clients
     for (const auto& clientId : m_Clients | std::views::keys)
     {
-        // Send client list
-        SendClientList(clientId);
-
-        // Send messages
-        SendMessageHistory(clientId);
+        // Is typing updates
+        /*BufferWriter writer;
+        writer.WriteRaw<PacketType>(PacketType::ClientTyping);
+        writer.WriteRaw<uint32_t>(clientId);
+        writer.WriteRaw<bool>(isTyping);
+        // or do a send to all?*/
     }
 }
 
@@ -104,7 +104,7 @@ void ServerAppLayer::PollIncomingMessages()
         const ClientID clientId = incomingMessage->m_conn;
 
         // Copy incoming data to scratch buffer
-        if (m_ScratchBuffer.Size < incomingMessage->m_cbSize && incomingMessage->m_cbSize < UINT64_MAX)
+        if (std::cmp_less(m_ScratchBuffer.Size, incomingMessage->m_cbSize))
             m_ScratchBuffer.Allocate(incomingMessage->m_cbSize);
         std::memset(m_ScratchBuffer.Data, 0, m_ScratchBuffer.Size);
         std::memcpy(m_ScratchBuffer.Data, incomingMessage->m_pData, incomingMessage->m_cbSize);
@@ -121,6 +121,47 @@ void ServerAppLayer::PollIncomingMessages()
         // Process packet payload
         switch (type)
         {
+            case PacketType::ClientList:
+            case PacketType::ClientConnected:
+            case PacketType::ClientQuit:
+            case PacketType::Error:
+            {
+                const std::string errorMsg =
+                    std::format("Received packet type '{}' from client is not allowed!", static_cast<uint16_t>(type));
+
+                BufferWriter writer;
+                writer.WriteRaw<PacketType>(PacketType::Error);
+                writer.WriteString(errorMsg);
+
+                SendMessage(clientId, writer.GetBuffer());
+
+                break;
+            }
+
+            case PacketType::ClientTyping:
+            {
+                if (m_Clients.contains(clientId))
+                {
+                    bool isTyping;
+                    reader.ReadRaw<bool>(isTyping);
+
+                    m_Clients.at(clientId).IsTyping = isTyping;
+                }
+                else
+                {
+                    const std::string errorMsg =
+                        std::format("Received packet type '{}' from client is only allowed when connected!", static_cast<uint16_t>(type));
+
+                    BufferWriter writer;
+                    writer.WriteRaw<PacketType>(PacketType::Error);
+                    writer.WriteString(errorMsg);
+
+                    SendMessage(clientId, writer.GetBuffer());
+                }
+
+                break;
+            }
+
             case PacketType::ConnectionRequest:
             {
                 std::string username;
@@ -139,11 +180,9 @@ void ServerAppLayer::PollIncomingMessages()
                     auto& clientInfo = m_Clients[clientId];
                     clientInfo.Username = username;
 
-                    // Send connected users
-                    SendClientList(clientId);
-
-                    // Send message history
-                    SendMessageHistory(clientId);
+                    // Send connected users to everyone
+                    for (const auto& id : m_Clients | std::views::keys)
+                        SendClientList(id);
 
                     // Send welcome message
                     SendWelcomeMessage(clientId);
@@ -157,23 +196,33 @@ void ServerAppLayer::PollIncomingMessages()
                 break;
             }
 
-            case PacketType::ClientList:
-                break;
-
             case PacketType::Message:
             {
                 const auto& clientInfo = m_Clients.at(clientId);
 
-                MessageData message{
-                    .UserID = clientId,
-                    .Username = clientInfo.Username,
-                };
+                MessageData messageData;
+                reader.ReadObject<MessageData>(messageData);
 
-                reader.ReadRaw<int64_t>(message.Timestamp);
-                reader.ReadString(message.Message);
+                // In case user tries to spoof their id, overwrite with what we know is the sender
+                messageData.UserID = clientId;
+                messageData.Username = clientInfo.Username;
 
-                EP_ASSERT(!m_Messages.contains(message.Timestamp));
-                m_Messages.insert_or_assign(message.Timestamp, message);
+                Log::Info("Message received: {}", messageData.Message);
+
+                m_Messages.emplace_back(messageData);
+
+                // Send to clients
+                BufferWriter writer;
+                writer.WriteRaw<PacketType>(PacketType::Message);
+                writer.WriteObject<MessageData>(messageData);
+
+                for (const auto& id : m_Clients | std::views::keys)
+                {
+                    if (id == clientId)
+                        continue;
+
+                    SendMessage(id, writer.GetBuffer());
+                }
 
                 break;
             }
@@ -247,13 +296,13 @@ void ServerAppLayer::OnConnectionStatusChanged(SteamNetConnectionStatusChangedCa
     }
 }
 
-auto ServerAppLayer::SendMessage(const ClientID clientId, const Buffer buffer) -> void
+auto ServerAppLayer::SendMessage(const ClientID clientId, const Buffer buffer) const -> void
 {
     EP_ASSERT(buffer.Size <= UINT32_MAX); // Below method only accepts up to the max size of 32 bit uint as size
     auto result = m_Socket->SendMessageToConnection(clientId, buffer.Data, static_cast<uint32_t>(buffer.Size), 0, nullptr);
 }
 
-auto ServerAppLayer::SendClientList(const ClientID clientId) -> void
+auto ServerAppLayer::SendClientList(const ClientID clientId) const -> void
 {
     BufferWriter writer;
     writer.WriteRaw<PacketType>(PacketType::ClientList);
@@ -262,22 +311,7 @@ auto ServerAppLayer::SendClientList(const ClientID clientId) -> void
     SendMessage(clientId, writer.GetBuffer());
 }
 
-auto ServerAppLayer::SendMessageHistory(const ClientID clientId) -> void
-{
-    if (m_Messages.empty())
-    {
-        Log::Warn("No message history to send!");
-        return;
-    }
-
-    BufferWriter writer;
-    writer.WriteRaw<PacketType>(PacketType::Message);
-    writer.WriteMap<int64_t, MessageData>(m_Messages);
-
-    SendMessage(clientId, writer.GetBuffer());
-}
-
-auto ServerAppLayer::SendWelcomeMessage(const ClientID clientId) -> void
+auto ServerAppLayer::SendWelcomeMessage(const ClientID clientId) const -> void
 {
     using namespace std::chrono;
 
@@ -294,8 +328,6 @@ auto ServerAppLayer::SendWelcomeMessage(const ClientID clientId) -> void
     // Messages always get sent as a map to allow multiple messages in one packet
     BufferWriter writer;
     writer.WriteRaw<PacketType>(PacketType::Message);
-    writer.WriteRaw<uint32_t>(1);
-    writer.WriteRaw<int64_t>(tp);
     writer.WriteObject<MessageData>(message);
 
     SendMessage(clientId, writer.GetBuffer());
@@ -304,10 +336,10 @@ auto ServerAppLayer::SendWelcomeMessage(const ClientID clientId) -> void
 auto ServerAppLayer::IsValidUsername(const std::string& username) -> bool
 {
     // We do not allow names with different case sizes but further identical
-    std::string requestedName;
+    std::string requestedName = username;
 
     std::ranges::transform(
-        username, requestedName.begin(),
+        requestedName, requestedName.begin(),
         [](const unsigned char c)
         {
             return static_cast<char>(std::tolower(c));
@@ -315,7 +347,7 @@ auto ServerAppLayer::IsValidUsername(const std::string& username) -> bool
     );
 
     // Reserved names
-    constexpr std::array reservedNames = { "admin", "moderator" };
+    constexpr std::array reservedNames = { "admin", "moderator", "root" };
     for (const auto& reservedName : reservedNames)
     {
         if (requestedName == reservedName)

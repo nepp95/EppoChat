@@ -5,21 +5,11 @@
 
 #include <chrono>
 
-// With utf-8 strings, we use 64 bit uints to signify the string length
-// Both buffer reader and writer account for this
-
 constexpr uint32_t MAX_PAYLOAD_SIZE = 1024 * 1024;
 
 enum class PacketType : uint16_t
 {
     Unknown = 0,
-
-    // Client -> Server
-    // UTF-8 string -> Username
-    //
-    // Server -> Client
-    // 8-bit integer (bool) -> Client accepted yes/no
-    ConnectionRequest,
 
     // Server -> Client
     // 32-bit integer -> Client map size
@@ -27,16 +17,40 @@ enum class PacketType : uint16_t
     ClientList,
 
     // Client -> Server
-    // 64-bit signed int -> Message time since epoch in millisecond precision
-    // UTF-8 string -> Message
+    // 8-bit integer (bool) -> Client is typing yes/no
     //
     // Server -> Client
-    // 32-bit unsigned int -> Message count
-    // Below is either a single item or a map, depending on message count
-    // 32-bit unsigned int -> ClientID
-    // 64-bit signed int -> Message time since epoch in millisecond precision
-    // UTF-8 string -> Message
+    // 32-bit unsigned int -> Client id
+    // 8-bit integer (bool) -> Client is typing yes/no
+    ClientTyping,
+
+    // Server -> Client
+    // 32-bit unsigned int -> Client id
+    // UTF-8 string -> Username
+    ClientConnected,
+
+    // Server -> Client
+    // 32-bit unsigned int -> Client id
+    ClientQuit,
+
+    // Client -> Server
+    // UTF-8 string -> Username
+    //
+    // Server -> Client
+    // 8-bit integer (bool) -> Client accepted yes/no
+    // UTF-8 string -> Error message
+    ConnectionRequest,
+
+    // Client -> Server
+    // MessageData Object
+    //
+    // Server -> Client
+    // MessageData Object
     Message,
+
+    // Server -> Client
+    // UTF-8 string -> Error message
+    Error,
 };
 
 struct MessageData

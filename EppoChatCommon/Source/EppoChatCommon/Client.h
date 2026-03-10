@@ -12,6 +12,7 @@ using ClientID = HSteamNetConnection;
 struct ClientInfo
 {
     std::string Username;
+    bool IsTyping = false;
 
     static auto Serialize(Eppo::BufferWriter* serializer, const ClientInfo& object) -> bool
     {

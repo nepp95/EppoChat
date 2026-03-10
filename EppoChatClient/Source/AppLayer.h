@@ -60,7 +60,7 @@ private:
 
     // Chat info
     std::map<ClientID, ClientInfo> m_ConnectedClients;
-    std::map<int64_t, MessageData> m_Messages;
+    std::vector<MessageData> m_Messages;
 
     static ClientAppLayer* s_Instance;
 };

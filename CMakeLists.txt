@@ -14,7 +14,7 @@ include(FetchContent)
 FetchContent_Declare(
     EppoCore
     GIT_REPOSITORY https://github.com/nepp95/EppoCore.git
-    GIT_TAG 0d2e0fb5cce48037f72d8cea1014326ece56f92a
+    GIT_TAG 7cde3c50cacd986a19ecb7366200c70bc4f28267
 )
 
 FetchContent_MakeAvailable(EppoCore)
