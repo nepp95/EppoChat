@@ -456,14 +456,15 @@ auto ClientAppLayer::RenderChat() -> void
 
     ImGui::PopStyleVar();
     ImGui::Separator();
+    using namespace std::chrono;
+
+    const auto now = system_clock::now();
+    const int64_t tp = time_point_cast<milliseconds>(now).time_since_epoch().count();
 
     if (constexpr ImGuiInputTextFlags inputFlags = ImGuiInputTextFlags_EnterReturnsTrue;
         ImGui::InputText("Input", &s_InputMessage, inputFlags))
     {
-        using namespace std::chrono;
-
-        const auto now = system_clock::now();
-        const int64_t tp = time_point_cast<milliseconds>(now).time_since_epoch().count();
+        m_LastTypeTime = tp;
 
         const MessageData messageData{
             .UserID = m_Connection,
@@ -480,6 +481,14 @@ auto ClientAppLayer::RenderChat() -> void
 
         m_Messages.emplace_back(messageData);
         s_InputMessage.clear();
+    }
+    else if (m_LastTypeTime - tp > 3000)
+    {
+        BufferWriter writer;
+        writer.WriteRaw<PacketType>(PacketType::ClientTyping);
+        writer.WriteRaw<bool>(false);
+
+        SendMessage(writer.GetBuffer());
     }
 
     ImGui::SetItemDefaultFocus();
