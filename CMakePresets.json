@@ -24,5 +24,17 @@
         "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
       }
     }
+  ],
+  "buildPresets": [
+    {
+      "name": "Debug",
+      "displayName": "Debug",
+      "configurePreset": "Debug"
+    },
+    {
+      "name": "Release",
+      "displayName": "Release",
+      "configurePreset": "Release"
+    }
   ]
 }
