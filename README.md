@@ -10,6 +10,7 @@ The server is set up in a way that you can connect to the server but the server 
 Vcpkg is currently being used in tandem with CMake Presets. If you want to make use of the cmake presets, having the `VCPKG_ROOT` environment variable set is required. Alternatively you can manually set the vcpkg root path inside the presets file or preferably create a user presets file.
 ```
 git clone https://github.com/nepp95/EppoChat.git
+cd EppoChat
 cmake --preset Debug
 cmake --build --preset Debug
 ```
